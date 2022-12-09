@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -55,13 +56,16 @@ class Station {
 
 class UserSolution {
 	int N;
+	int[] mDownTown;
 	ArrayList<Station> stations;
 	int limitDistance;
-	Map<Integer, Integer> candidates;
+	Map<Integer, int[]> downtownDist;
 	
 	void init(int N, int mDownTown[]) {
 		this.N = N;
+		this.mDownTown = mDownTown;
 		stations = new ArrayList<>();
+		downtownDist = new HashMap<>();
 		
 		for(int i = 1; i <= N; i++) {
 			Station s = new Station(i);
@@ -91,30 +95,73 @@ class UserSolution {
 			}
 		}
 		
-		printStations();
-		
+		//printStations();
 	}
 	
 	void changeLimitDistance(int mLimitDistance)
 	{
 		this.limitDistance = mLimitDistance;
+		
+		for(int i = 0; i < mDownTown.length; i++) {
+			int trgtIdx = mDownTown[i]-1;
+			int[] dist = dijkstra(trgtIdx);
+			downtownDist.put(mDownTown[i], dist);
+		}
+		
+		//System.out.println(">> downtownDist = " + downtownDist);
 	}
 	
 	int findCity(int mOpt, int mDestinations[])
 	{
-		//mOpt = √‚±Ÿ«“ ¡ﬂΩ… µµΩ√¿« ∞πºˆ
-		//mDestinations[] = √‚±Ÿ«“ ¡ﬂΩ… µµΩ√¿« ID ∏ÆΩ∫∆Æ
+		int[] dist = new int[N];	//Ï∂úÍ∑º ÎèÑÏãú Í∏∞Î∞òÏùò ÏµúÏ¢Ö distance
+		
+		PriorityQueue<Station> minHeap = new PriorityQueue<>(new Comparator<Station>() {
+			@Override
+			public int compare(Station o1, Station o2) {
+				if(o1.price < o2.price) return -1;
+				else if(dist[o1.id-1] < dist[o2.id-1]) return -1;
+				else if(o1.id < o2.id) return -1;
+				else return 1;
+			}
+		});
+		
+		Arrays.fill(dist, Integer.MAX_VALUE);
+		
+		//mOpt = Ï∂úÍ∑º ÎèÑÏãú Í∞ØÏàò
+		//mDestinations[] = Ï∂úÍ∑º ÎèÑÏãú ID
 		for(int i = 0; i < mOpt; i++) {
-			int trgtIdx = mDestinations[i]-1;
-			candidates = new HashMap<>();
-			int shortestId = bfs(trgtIdx, limitDistance);
+			int[] dtDist = downtownDist.get(mDestinations[i]);
+			//System.out.println(">> dtDist = " + Arrays.toString(dtDist));
+			for(int j = 0; j < dist.length; j++) {
+				dist[j] = (dist[j] == Integer.MAX_VALUE ? 0: dist[j]) + (dtDist[j] == Integer.MAX_VALUE ? 0 : dtDist[j]);
+			}
+		}
+		
+		System.out.println(">> final dist = " + Arrays.toString(dist));
+		
+		for(int i = 0; i < N; i++) {
+			Station s = stations.get(i);
+			minHeap.add(s);
+		}
+		
+		System.out.println(">> minHeap = " + minHeap);
+		
+		for(int i = 0; i < N; i++) {
+			Station candidate = minHeap.poll();
+			
+			if(!candidate.downtown && dist[candidate.id-1] <= limitDistance) {
+				candidate.price++;
+				System.out.println(">> candidate = " + candidate);
+				printStations();
+				return candidate.id;
+			}
 		}
 		
 		return -1;
 	}
 	
-	int bfs(int trgtIdx, int limitDistance) {
-		Queue<Integer> queue = new LinkedList<Integer>();
+	int[] dijkstra(int trgtIdx) {
+		int[] dist = new int[N];
 		boolean[] visited = new boolean[N];
 		
 		//Custom Min Heap
@@ -122,57 +169,54 @@ class UserSolution {
 
 			@Override
 			public int compare(Station o1, Station o2) {
-				if(o1.price > o2.price) return 1;
-				else {
-					if(candidates.get(o1.id) > candidates.get(o2.id)) return 1;
-					else {
-						if(o1.id > o2.id) return 1;
-						else return -1;
-					}
-				}
+				if(dist[o1.id-1] < dist[o2.id-1]) return -1;
+				else if(o1.id < o2.id) return -1;
+				else return 1;
 			}
 			
 		});
+
+		Arrays.fill(dist, Integer.MAX_VALUE);
 		
+		dist[trgtIdx] = 0;
+		pq.offer(stations.get(trgtIdx));
 		
-		visited[trgtIdx] = true;
-		queue.offer(trgtIdx);
-		
-		while(!queue.isEmpty()) {
-			int curr = queue.poll();
-			Station s = stations.get(curr);
-			int currDist = 0;
+		while(!pq.isEmpty()) {
+			Station curr = pq.poll();
+			int currDist = dist[curr.id-1];
 			
-			if(trgtIdx == curr) currDist = 0;
-			else currDist = candidates.get(s.id);
+			if(visited[curr.id-1]) continue;
 			
-			for(int j = 0; j < s.next.size(); j++) {
-				int distFromS = s.distances.get(j);
+			visited[curr.id-1] = true;
+			
+			for(int j = 0; j < curr.next.size(); j++) {
+				int distFromCurr = curr.distances.get(j);
 				
-				Station n = s.next.get(j);
-				int nextIdx = n.id-1;
+				Station n = curr.next.get(j);
 				
-				int distance = currDist + distFromS;
-								
-				if(!visited[nextIdx] && !candidates.containsKey(n.id) && !n.downtown && distance <= limitDistance) {
-					visited[nextIdx] = true;
-					candidates.put(n.id, distance);
-					pq.add(n);
-					queue.offer(nextIdx);
+				int distance = currDist + distFromCurr;
+				
+				if(!visited[n.id-1] && distance < dist[n.id-1]) {
+					dist[n.id-1] = distance;
+					pq.offer(n);
 				}
 			}
-			System.out.println(">> candidates = " + candidates);
 			
 		}
-		System.out.println(">> pq = " + pq);
-		//printStations();
-		
-		return pq.poll().id;
+		System.out.println(">> " + (trgtIdx + 1) + " dist = " + Arrays.toString(dist));
+		//printStationId();
+		return dist;
 	}
 	
 	void printStations() {
 		for(Station s : stations) {
 			System.out.println(s);
+		}
+	}
+	
+	void printStationId() {
+		for(Station s : stations) {
+			System.out.println(s.id);
 		}
 	}
 }
